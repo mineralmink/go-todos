@@ -18,23 +18,24 @@ type Todo struct {
 }
 
 func getTodoHandler(c *gin.Context) {
-	status := c.Query("status")
-	items := []Todo{}
 	todos, err := queryAll()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": err.Error()})
 		return
 	}
-	for _, item := range todos {
-		if status != "" {
-			if item.Status == status {
-				items = append(items, item)
-				//e.g. http://localhost:1234/todos?status=completed
-			}
-		} else {
-			items = append(items, item)
-		}
 
+	status := c.Query("status")
+	if status == "" {
+		c.JSON(http.StatusOK, todos)
+		return
+	}
+
+	items := []Todo{}
+	for _, item := range todos {
+		if item.Status == status {
+			items = append(items, item)
+			//e.g. http://localhost:1234/todos?status=completed
+		}
 	}
 	c.JSON(http.StatusOK, items)
 }
