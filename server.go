@@ -97,6 +97,15 @@ func updateTodoHandler(c *gin.Context) {
 	c.JSON(http.StatusCreated, todos)
 }
 
+func deleteTodoHandler(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, err)
+		return
+	}
+	err = deleteTodo(id)
+	c.JSON(http.StatusOK, "Delete success")
+}
 func queryAll() ([]Todo, error) {
 
 	var todos []Todo
@@ -208,6 +217,27 @@ func updateTodo(todo Todo) ([]Todo, error) {
 	return todos, nil
 }
 
+func deleteTodo(id int) error {
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Fatal("Connect to database error", err)
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("DELETE FROM todos WHERE id=$1")
+
+	if err != nil {
+		return fmt.Errorf("can't prepare statement delete %s", err)
+	}
+
+	if _, err := stmt.Exec(id); err != nil {
+		return fmt.Errorf("error execute delete %s", err)
+	}
+	fmt.Println("delete success")
+	return nil
+
+}
+
 func main() {
 	r := gin.Default()
 
@@ -215,5 +245,6 @@ func main() {
 	r.GET("/todos/:id", getTodoByIdHandler)
 	r.POST("/todos", createTodoHandler)
 	r.PUT("/todos/:id", updateTodoHandler)
+	r.DELETE("/todos/:id", deleteTodoHandler)
 	r.Run(":1234")
 }
