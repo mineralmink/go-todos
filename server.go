@@ -17,12 +17,14 @@ type Todo struct {
 	Status string `json:"status"`
 }
 
-var todos []Todo
-
 func getTodoHandler(c *gin.Context) {
 	status := c.Query("status")
 	items := []Todo{}
-	queryAll()
+	todos, err := queryAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": err.Error()})
+		return
+	}
 	for _, item := range todos {
 		if status != "" {
 			if item.Status == status {
@@ -37,7 +39,9 @@ func getTodoHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
-func queryAll() {
+func queryAll() ([]Todo, error) {
+
+	var todos []Todo
 	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatal("Connect to database error", err)
@@ -47,12 +51,12 @@ func queryAll() {
 
 	stmt, err := db.Prepare("SELECT id,title, status FROM todos")
 	if err != nil {
-		log.Fatal("can't prepare query all todos statement", err)
+		return []Todo{}, fmt.Errorf("can't prepare query all todos statement %s", err)
 	}
 
 	rows, err := stmt.Query()
 	if err != nil {
-		log.Fatal("can't query all todos", err)
+		return []Todo{}, fmt.Errorf("can't query all todos %s", err)
 	}
 
 	for rows.Next() {
@@ -61,14 +65,13 @@ func queryAll() {
 
 		err := rows.Scan(&id, &title, &status)
 		if err != nil {
-			log.Fatal("can't Scan row into variable", err)
+			return []Todo{}, fmt.Errorf("can't Scan row into variable %s", err)
 		}
 		todo := Todo{id, title, status}
 		todos = append(todos, todo)
-		//fmt.Println(id, title, status)
 	}
 	fmt.Println("query all todo success")
-	//fmt.Printf("%v", todos)
+	return todos, nil
 }
 
 func main() {
