@@ -40,6 +40,24 @@ func getTodoHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+func createTodoHandler(c *gin.Context) {
+	t := Todo{}
+	//r.body and read body -> bind json and send to &t
+
+	if err := c.ShouldBindJSON(&t); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	todo, err := insertTodo(t)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, todo)
+
+}
+
 func queryAll() ([]Todo, error) {
 
 	var todos []Todo
@@ -75,10 +93,31 @@ func queryAll() ([]Todo, error) {
 	return todos, nil
 }
 
+func insertTodo(t Todo) ([]Todo, error) {
+
+	var todos []Todo
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return []Todo{}, fmt.Errorf("Connect to database error %s", err)
+	}
+
+	defer db.Close()
+	row := db.QueryRow("INSERT INTO todos (title, status) values ($1, $2)  RETURNING id", t.Title, t.Status)
+	var id int
+	err = row.Scan(&id)
+	if err != nil {
+		return []Todo{}, fmt.Errorf("can't scan id %s", err)
+	}
+	todo := Todo{id, t.Title, t.Status}
+	todos = append(todos, todo)
+	fmt.Println("insert todo success id: ", id)
+	return todos, nil
+}
+
 func main() {
 	r := gin.Default()
 
 	r.GET("/todos", getTodoHandler)
-
+	r.POST("/todos", createTodoHandler)
 	r.Run(":1234")
 }
