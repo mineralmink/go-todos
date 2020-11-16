@@ -66,13 +66,35 @@ func getTodoByIdHandler(c *gin.Context) {
 		return
 	}
 
-	todos, err := queryById(id)
+	todos, err := queryByID(id)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, todos)
+}
+
+func updateTodoHandler(c *gin.Context) {
+	var t Todo
+	var todos []Todo
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, err)
+		return
+	}
+
+	if err := c.ShouldBindJSON(&t); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	t.ID = id
+	todos, err = updateTodo(t)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, todos)
 }
 
 func queryAll() ([]Todo, error) {
@@ -131,7 +153,7 @@ func insertTodo(t Todo) ([]Todo, error) {
 	return todos, nil
 }
 
-func queryById(rowId int) ([]Todo, error) {
+func queryByID(rowId int) ([]Todo, error) {
 
 	var todos []Todo
 	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
@@ -160,11 +182,38 @@ func queryById(rowId int) ([]Todo, error) {
 	return todos, nil
 }
 
+func updateTodo(todo Todo) ([]Todo, error) {
+
+	var todos []Todo
+
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Fatal("Connect to database error", err)
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("UPDATE todos SET title=$2,status=$3 where id=$1")
+
+	if err != nil {
+		return []Todo{}, fmt.Errorf("can't prepare statement update")
+	}
+
+	if _, err := stmt.Exec(todo.ID, todo.Title, todo.Status); err != nil {
+		return []Todo{}, fmt.Errorf("error execite update %s", err)
+	}
+
+	todos = append(todos, todo)
+	fmt.Println("update success")
+
+	return todos, nil
+}
+
 func main() {
 	r := gin.Default()
 
 	r.GET("/todos", getTodoHandler)
 	r.GET("/todos/:id", getTodoByIdHandler)
 	r.POST("/todos", createTodoHandler)
+	r.PUT("/todos/:id", updateTodoHandler)
 	r.Run(":1234")
 }
