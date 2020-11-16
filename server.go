@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
@@ -58,6 +59,22 @@ func createTodoHandler(c *gin.Context) {
 
 }
 
+func getTodoByIdHandler(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id")) //atomic to integer
+	if err != nil {
+		c.JSON(http.StatusBadRequest, err)
+		return
+	}
+
+	todos, err := queryById(id)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, todos)
+}
+
 func queryAll() ([]Todo, error) {
 
 	var todos []Todo
@@ -75,7 +92,7 @@ func queryAll() ([]Todo, error) {
 
 	rows, err := stmt.Query()
 	if err != nil {
-		return []Todo{}, fmt.Errorf("can't query all todos %s", err)
+		log.Fatal("Connect to database error", err)
 	}
 
 	for rows.Next() {
@@ -98,10 +115,10 @@ func insertTodo(t Todo) ([]Todo, error) {
 	var todos []Todo
 	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 	if err != nil {
-		return []Todo{}, fmt.Errorf("Connect to database error %s", err)
+		log.Fatal("Connect to database error", err)
 	}
-
 	defer db.Close()
+
 	row := db.QueryRow("INSERT INTO todos (title, status) values ($1, $2)  RETURNING id", t.Title, t.Status)
 	var id int
 	err = row.Scan(&id)
@@ -114,10 +131,40 @@ func insertTodo(t Todo) ([]Todo, error) {
 	return todos, nil
 }
 
+func queryById(rowId int) ([]Todo, error) {
+
+	var todos []Todo
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Fatal("Connect to database error", err)
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("SELECT id, title, status FROM todos where id=$1")
+	if err != nil {
+		return []Todo{}, fmt.Errorf("can't prepare query one row statement", err)
+	}
+
+	row := stmt.QueryRow(rowId)
+	var id int
+	var title, status string
+
+	err = row.Scan(&id, &title, &status)
+	if err != nil {
+		return []Todo{}, fmt.Errorf("can't scan row into variables %s", err)
+	}
+
+	fmt.Println("one row", id, title, status)
+	todo := Todo{id, title, status}
+	todos = append(todos, todo)
+	return todos, nil
+}
+
 func main() {
 	r := gin.Default()
 
 	r.GET("/todos", getTodoHandler)
+	r.GET("/todos/:id", getTodoByIdHandler)
 	r.POST("/todos", createTodoHandler)
 	r.Run(":1234")
 }
